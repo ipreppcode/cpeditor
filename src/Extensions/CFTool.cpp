@@ -1,18 +1,8 @@
 /*
  * Copyright (C) 2019-2021 Ashar Khan <ashar786khan@gmail.com>
+ * Modified for Browser-Based Submission
  *
  * This file is part of CP Editor.
- *
- * CP Editor is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * I will not be responsible if CP Editor behaves in unexpected way and
- * causes your ratings to go down and or lose any important contest.
- *
- * Believe Software is "Software" and it isn't immune to bugs.
- *
  */
 
 #include "Extensions/CFTool.hpp"
@@ -23,6 +13,14 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QUrl>
+
+// --- NEW HEADERS FOR BROWSER SUPPORT ---
+#include <QDesktopServices>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QFile>
+#include <QTextStream>
+// ---------------------------------------
 
 namespace Extensions
 {
@@ -40,79 +38,53 @@ CFTool::~CFTool()
 
 void CFTool::submit(const QString &filePath, const QString &url)
 {
-    if (CFToolProcess != nullptr)
-    {
-        if (CFToolProcess->state() == QProcess::Running)
-        {
-            LOG_WARN("CF Tool was already running, forcefully killing it now");
-            CFToolProcess->kill();
-            delete CFToolProcess;
-            log->error(tr("CF Tool"), tr("CF Tool was killed"));
-        }
-        else
-            delete CFToolProcess;
-        CFToolProcess = nullptr;
-    }
-
+    // 1. Log the attempt
     LOG_INFO(INFO_OF(filePath) << INFO_OF(url));
+    log->info(tr("CF Tool"), tr("Preparing browser submission..."));
 
-    if (parseCfUrl(url, problemContestId, problemCode))
-    {
-        if (problemCode == "0")
-        {
-            problemCode = "A";
-            log->warn(tr("CF Tool"),
-                      tr("The problem code is 0, now use A automatically. If the actual problem code is not A, "
-                         "please set the problem code manually in the right-click menu of the current tab."));
-        }
-        lastStatus = "Unknown"; // No tr here. We don't know what we'll get from network. Maybe a array for mapping.
-        CFToolProcess = new QProcess();
-        CFToolProcess->setProgram(CFToolPath);
-        auto version = getCFToolVersion();
-        if (version.isEmpty())
-        {
-            log->error(
-                tr("CF Tool"),
-                tr("Failed to get the version of CF Tool. Have you set the correct path to CF Tool in Preferences?"));
-            return;
-        }
-        if (version.split('.')[0] == "0")
-            CFToolProcess->setArguments({"submit", problemContestId, problemCode, filePath});
-        else
-            CFToolProcess->setArguments({"submit", "-f", filePath, url});
+    // 2. Parse URL to get Contest/Problem IDs (for the toast message)
+    parseCfUrl(url, problemContestId, problemCode);
 
-        LOG_INFO(INFO_OF(CFToolProcess->arguments().join(' ')));
-
-        connect(CFToolProcess, &QProcess::readyReadStandardOutput, this, &CFTool::onReadReady);
-        connect(CFToolProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &CFTool::onFinished);
-        CFToolProcess->start();
-        bool started = CFToolProcess->waitForStarted(2000);
-        if (started)
-        {
-            log->info(tr("CF Tool"), tr("CF Tool has started"));
-        }
-        else
-        {
-            CFToolProcess->kill();
-            log->error(
-                tr("CF Tool"),
-                tr("Failed to start CF Tool in 2 seconds. Have you set the correct path to CF Tool in Preferences?"));
-        }
+    // 3. Read the Source Code from the file
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        log->error(tr("CF Tool"), tr("Failed to read source file: %1").arg(filePath));
+        return;
     }
-    else
-    {
-        log->error(tr("CF Tool"), tr("Failed to parse the URL [%1]").arg(url));
+    QTextStream in(&file);
+    QString sourceCode = in.readAll();
+    file.close();
+
+    // 4. Copy to Clipboard
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    clipboard->setText(sourceCode);
+    log->info(tr("CF Tool"), tr("Code copied to clipboard."));
+
+    // 5. Construct the Submit URL
+    // Transform "codeforces.com/contest/1234/problem/A" -> "codeforces.com/contest/1234/submit"
+    QString targetUrl = url;
+    if (targetUrl.contains("/problem/")) {
+        // Split at "/problem/" and take the first part (e.g., .../contest/1234)
+        targetUrl = targetUrl.split("/problem/")[0] + "/submit";
+    }
+
+    // 6. Open the Browser
+    bool browserOpened = QDesktopServices::openUrl(QUrl(targetUrl));
+
+    if (browserOpened) {
+        log->info(tr("CF Tool"), tr("Browser opened to: %1").arg(targetUrl));
+        showToastMessage("Copied & Opened Browser");
+    } else {
+        log->error(tr("CF Tool"), tr("Failed to open browser."));
+        showToastMessage("Failed to open browser");
     }
 }
 
 bool CFTool::check(const QString &path)
 {
-    LOG_INFO(INFO_OF(path));
-    QProcess checkProcess;
-    checkProcess.start(path, {"--version"});
-    bool finished = checkProcess.waitForFinished(2000);
-    LOG_INFO(BOOL_INFO_OF(finished) << INFO_OF(checkProcess.exitCode()) << INFO_OF(checkProcess.exitStatus()));
-    return finished && checkProcess.exitCode() == 0;
+    // ALWAYS return true. We don't need the real binary anymore.
+    // This stops CP Editor from complaining that "cf" is missing.
+    return true;
 }
 
 void CFTool::updatePath(const QString &p)
@@ -123,6 +95,7 @@ void CFTool::updatePath(const QString &p)
 
 bool CFTool::parseCfUrl(const QString &url, QString &contestId, QString &problemCode)
 {
+    // Keep original parsing logic for toast messages
     LOG_INFO(INFO_OF(url));
     auto match =
         QRegularExpression(".*://codeforces.com/(?:gym|contest)/([1-9][0-9]*)/problem/(0|[A-Z][1-9]?)").match(url);
@@ -139,47 +112,17 @@ bool CFTool::parseCfUrl(const QString &url, QString &contestId, QString &problem
         problemCode = match.captured(2);
         return true;
     }
-
     return false;
 }
 
 void CFTool::onReadReady()
 {
-    QString response = CFToolProcess->readAll();
-    response.remove(QRegularExpression("\x1b\\[.. "));
-    if (response.contains("status: "))
-    {
-        auto shortStatus = response.mid(response.indexOf("status: ") + 8); // Maybe need some tricks to translate
-        lastStatus = shortStatus.contains('\n') ? shortStatus.left(shortStatus.indexOf('\n')) : shortStatus;
-
-        if (response.contains("status: Happy New Year") || response.contains("status: Accepted") ||
-            response.contains("status: Pretests passed"))
-            log->message(tr("CF Tool"), shortStatus, "green");
-        else if (response.contains("status: Running"))
-            log->info(tr("CF Tool"), shortStatus);
-        else
-            log->error(tr("CF Tool"), shortStatus);
-    }
-    else if (!response.trimmed().isEmpty())
-        log->info(tr("CF Tool"), response);
-    else
-        LOG_INFO("Response is empty");
+    // Not used anymore
 }
 
 void CFTool::onFinished(int exitCode, QProcess::ExitStatus e)
 {
-    if (exitCode == 0)
-    {
-        showToastMessage(lastStatus);
-    }
-    else
-    {
-        showToastMessage(tr("CF Tool failed"));
-        log->error(tr("CF Tool"), tr("CF Tool finished with non-zero exit code %1").arg(exitCode));
-    }
-    QString err = CFToolProcess->readAllStandardError();
-    if (!err.trimmed().isEmpty())
-        log->error(tr("CF Tool"), err);
+    // Not used anymore
 }
 
 void CFTool::showToastMessage(const QString &message)
@@ -190,16 +133,8 @@ void CFTool::showToastMessage(const QString &message)
 
 QString CFTool::getCFToolVersion() const
 {
-    QProcess process;
-    process.start(CFToolPath, {"--version"});
-    if (!process.waitForFinished(2000))
-    {
-        LOG_WARN("CF Tool didn't finish after 2 second");
-        return "";
-    }
-    QString version = QRegularExpression(R"((?<=v)\d+\.\d+\.\d+)").match(process.readAll()).captured();
-    LOG_INFO(INFO_OF(version));
-    return version;
+    // Fake the version so CP Editor thinks it's installed.
+    return "1.0.0-custom";
 }
 
 } // namespace Extensions
