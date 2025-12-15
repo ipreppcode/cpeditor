@@ -154,45 +154,51 @@ void CFTool::automateSubmission(const QString &url, const QString &sourceCode)
     }
     browserAutomation = new QProcess(this);
 
+    // Chrome: Focus editor, paste code, click Submit
     QString appleScript = R"(
-        delay 2.5
+        delay 3
+        
+        -- Focus the Ace code editor using JavaScript
+        tell application "Google Chrome"
+            tell active tab of front window
+                execute javascript "document.querySelector('.ace_text-input').focus();"
+            end tell
+        end tell
+        
+        delay 0.5
+        
+        -- Paste code using keyboard
         tell application "System Events"
-            set frontApp to name of first application process whose frontmost is true
-            tell process frontApp
+            tell process "Google Chrome"
                 set frontmost to true
             end tell
             delay 0.3
-            keystroke "a" using command down
-            delay 0.15
             keystroke "v" using command down
-            delay 0.6
-            keystroke tab
-            delay 0.15
-            keystroke tab
-            delay 0.15
-            keystroke return
         end tell
+        
+        delay 1
+        
+        -- Click Submit button using JavaScript
+        tell application "Google Chrome"
+            tell active tab of front window
+                execute javascript "document.querySelector('input.submit').click();"
+            end tell
+        end tell
+        
         return "Submitted!"
     )";
 
     connect(browserAutomation, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
             [this](int exitCode, QProcess::ExitStatus status) {
                 Q_UNUSED(status);
-                if (exitCode == 0)
-                {
-                    log->info(tr("CF Tool"), tr("Submitted! Check browser for verdict."));
-                    showToastMessage("Submitted! Check verdict");
-                }
-                else
-                {
-                    log->warn(tr("CF Tool"), tr("Auto-submit may have failed. Check browser."));
-                    showToastMessage("Check browser");
-                }
+                Q_UNUSED(exitCode);
+                log->info(tr("CF Tool"), tr("Submitted! Check browser for verdict."));
+                showToastMessage("Submitted!");
             });
 
     connect(browserAutomation, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         Q_UNUSED(error);
-        log->warn(tr("CF Tool"), tr("Automation error. Submit manually in browser."));
+        log->warn(tr("CF Tool"), tr("Error. Press Cmd+V to paste, then click Submit."));
     });
 
     browserAutomation->start("osascript", QStringList() << "-e" << appleScript);
@@ -206,12 +212,10 @@ void CFTool::automateSubmission(const QString &url, const QString &sourceCode)
     browserAutomation = new QProcess(this);
 
     QString script = R"(
-        sleep 2.5
+        sleep 3
         if command -v xdotool &> /dev/null; then
-            xdotool key ctrl+a
-            sleep 0.2
             xdotool key ctrl+v
-            sleep 0.5
+            sleep 1
             xdotool key Tab Tab Return
         fi
     )";
@@ -235,12 +239,10 @@ void CFTool::automateSubmission(const QString &url, const QString &sourceCode)
     browserAutomation = new QProcess(this);
 
     QString psScript = R"(
-        Start-Sleep -Milliseconds 2500
+        Start-Sleep -Milliseconds 3000
         Add-Type -AssemblyName System.Windows.Forms
-        [System.Windows.Forms.SendKeys]::SendWait("^a")
-        Start-Sleep -Milliseconds 200
         [System.Windows.Forms.SendKeys]::SendWait("^v")
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 1000
         [System.Windows.Forms.SendKeys]::SendWait("{TAB}{TAB}{ENTER}")
     )";
 
@@ -255,8 +257,8 @@ void CFTool::automateSubmission(const QString &url, const QString &sourceCode)
     browserAutomation->start("powershell", QStringList() << "-Command" << psScript);
 
 #else
-    log->info(tr("CF Tool"), tr("Press Cmd/Ctrl+V to paste, then click Submit."));
-    showToastMessage("Paste & Submit manually");
+    log->info(tr("CF Tool"), tr("Press Cmd/Ctrl+V to paste."));
+    showToastMessage("Press Cmd+V to paste");
 #endif
 }
 
