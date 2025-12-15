@@ -254,37 +254,23 @@ void MainWindow::setCFToolUI()
         connect(cftool, &Extensions::CFTool::requestToastMessage, this, &MainWindow::requestToastMessage);
         ui->compileAndRunButtons->addWidget(submitToCodeforces);
         connect(submitToCodeforces, &QPushButton::clicked, this, [this] {
-            // REMOVED THE CONFIRMATION DIALOG FOR FASTER SUBMISSION
-            // If you want it back, un-comment the lines below.
-            
-            // emit confirmTriggered(this);
-            // auto response = QMessageBox::warning(
-            //     this, tr("Sure to submit"),
-            //     tr("Are you sure you want to submit this solution to Codeforces?\n\n URL: %1\n Language: %2")
-            //         .arg(problemURL, language),
-            //     QMessageBox::Yes | QMessageBox::No);
-
-            // if (response == QMessageBox::Yes)
-            // {
-                auto path = tmpPath();
-                if (path.isEmpty())
-                {
-                    QMessageBox::warning(this, tr("CF Tool"),
-                                         tr("Failed to save the temp file, and the solution is not submitted."));
-                }
-                else
-                {
-                    log->clear();
-                    cftool->submit(tmpPath(), problemURL);
-                }
-            // }
+            // No confirmation dialog - direct submission for speed
+            auto path = tmpPath();
+            if (path.isEmpty())
+            {
+                QMessageBox::warning(this, tr("CF Tool"),
+                                     tr("Failed to save the temp file, and the solution is not submitted."));
+            }
+            else
+            {
+                log->clear();
+                cftool->submit(tmpPath(), problemURL);
+            }
         });
     }
     
-    // --- FORCE ENABLE SUBMIT BUTTON ---
-    // We removed the "!Extensions::CFTool::check(cftoolPath)" check here.
+    // ALWAYS enable submit button - browser submission doesn't need cf-tool binary
     submitToCodeforces->setEnabled(true);
-    // ----------------------------------
 }
 
 void MainWindow::removeCFToolUI()
@@ -633,12 +619,17 @@ void MainWindow::applySettings(const QString &pagePath)
     {
         cftoolPath = SettingsHelper::getCFPath();
 
-        if (cftool != nullptr && Extensions::CFTool::check(cftoolPath))
+        // NOTE: We removed the CFTool::check() call here because browser-based
+        // submission doesn't require the cf-tool binary to exist.
+        // The submit button is always enabled when CF is enabled in settings.
+
+        if (cftool != nullptr)
         {
             cftool->updatePath(cftoolPath);
             if (submitToCodeforces != nullptr)
-                submitToCodeforces->setEnabled(true);
+                submitToCodeforces->setEnabled(true);  // Always enable
         }
+        
         if (problemURL.contains("codeforces.com"))
         {
             if (submitToCodeforces == nullptr && SettingsHelper::isCFEnable())
