@@ -268,7 +268,7 @@ void MainWindow::setCFToolUI()
             }
         });
     }
-    
+
     // ALWAYS enable submit button - browser submission doesn't need cf-tool binary
     submitToCodeforces->setEnabled(true);
 }
@@ -627,9 +627,9 @@ void MainWindow::applySettings(const QString &pagePath)
         {
             cftool->updatePath(cftoolPath);
             if (submitToCodeforces != nullptr)
-                submitToCodeforces->setEnabled(true);  // Always enable
+                submitToCodeforces->setEnabled(true); // Always enable
         }
-        
+
         if (problemURL.contains("codeforces.com"))
         {
             if (submitToCodeforces == nullptr && SettingsHelper::isCFEnable())

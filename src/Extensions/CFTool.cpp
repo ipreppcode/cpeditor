@@ -278,8 +278,7 @@ bool CFTool::parseCfUrl(const QString &url, QString &contestId, QString &problem
 {
     LOG_INFO(INFO_OF(url));
 
-    auto match =
-        QRegularExpression(".*://codeforces\\.com/(?:gym|contest)/(\\d+)/problem/([A-Za-z0-9]+)").match(url);
+    auto match = QRegularExpression(".*://codeforces\\.com/(?:gym|contest)/(\\d+)/problem/([A-Za-z0-9]+)").match(url);
 
     if (match.hasMatch())
     {
