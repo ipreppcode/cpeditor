@@ -254,15 +254,18 @@ void MainWindow::setCFToolUI()
         connect(cftool, &Extensions::CFTool::requestToastMessage, this, &MainWindow::requestToastMessage);
         ui->compileAndRunButtons->addWidget(submitToCodeforces);
         connect(submitToCodeforces, &QPushButton::clicked, this, [this] {
-            emit confirmTriggered(this);
-            auto response = QMessageBox::warning(
-                this, tr("Sure to submit"),
-                tr("Are you sure you want to submit this solution to Codeforces?\n\n URL: %1\n Language: %2")
-                    .arg(problemURL, language),
-                QMessageBox::Yes | QMessageBox::No);
+            // REMOVED THE CONFIRMATION DIALOG FOR FASTER SUBMISSION
+            // If you want it back, un-comment the lines below.
+            
+            // emit confirmTriggered(this);
+            // auto response = QMessageBox::warning(
+            //     this, tr("Sure to submit"),
+            //     tr("Are you sure you want to submit this solution to Codeforces?\n\n URL: %1\n Language: %2")
+            //         .arg(problemURL, language),
+            //     QMessageBox::Yes | QMessageBox::No);
 
-            if (response == QMessageBox::Yes)
-            {
+            // if (response == QMessageBox::Yes)
+            // {
                 auto path = tmpPath();
                 if (path.isEmpty())
                 {
@@ -274,18 +277,14 @@ void MainWindow::setCFToolUI()
                     log->clear();
                     cftool->submit(tmpPath(), problemURL);
                 }
-            }
+            // }
         });
     }
-    if (!Extensions::CFTool::check(cftoolPath))
-    {
-        submitToCodeforces->setEnabled(false);
-        log->error(tr("CF Tool"),
-                   tr("You need to install CF Tool to submit your code to Codeforces. If already installed, you can "
-                      "add it in the PATH environment variable or check your settings at %1.")
-                       .arg(SettingsHelper::pathOfCFPath()),
-                   false);
-    }
+    
+    // --- FORCE ENABLE SUBMIT BUTTON ---
+    // We removed the "!Extensions::CFTool::check(cftoolPath)" check here.
+    submitToCodeforces->setEnabled(true);
+    // ----------------------------------
 }
 
 void MainWindow::removeCFToolUI()
