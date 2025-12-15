@@ -21,6 +21,7 @@
 #include "generated/SettingsHelper.hpp"
 #include <QFileInfo>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QUrl>
 
@@ -68,6 +69,10 @@ void CFTool::submit(const QString &filePath, const QString &url)
         lastStatus = "Unknown"; // No tr here. We don't know what we'll get from network. Maybe a array for mapping.
         CFToolProcess = new QProcess();
         CFToolProcess->setProgram(CFToolPath);
+        auto env = QProcessEnvironment::systemEnvironment();
+        env.insert("LANG", "en_US.UTF-8");
+        env.insert("LC_ALL", "en_US.UTF-8");
+        CFToolProcess->setProcessEnvironment(env);
         auto version = getCFToolVersion();
         if (version.isEmpty())
         {
@@ -76,10 +81,21 @@ void CFTool::submit(const QString &filePath, const QString &url)
                 tr("Failed to get the version of CF Tool. Have you set the correct path to CF Tool in Preferences?"));
             return;
         }
-        if (version.split('.')[0] == "0")
+        const auto versionParts = version.split('.');
+        bool majorVersionOk = false;
+        const int majorVersion = versionParts.value(0).toInt(&majorVersionOk);
+        if (majorVersionOk && majorVersion == 0)
             CFToolProcess->setArguments({"submit", problemContestId, problemCode, filePath});
         else
-            CFToolProcess->setArguments({"submit", "-f", filePath, url});
+        {
+            QStringList arguments = {"submit", "-f", filePath, url};
+            if (majorVersionOk && majorVersion >= 1)
+            {
+                // Newer CF Tool uses a web browser flow for submission.
+                arguments.insert(1, "--use-browser");
+            }
+            CFToolProcess->setArguments(arguments);
+        }
 
         LOG_INFO(INFO_OF(CFToolProcess->arguments().join(' ')));
 
